@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 	"github.com/gorilla/mux"
 )
@@ -110,7 +111,7 @@ func (proxy *Proxy) newHandler(op *spec.Operation) http.HandlerFunc {
 				return nil
 			}
 
-			if err := proxy.Validate(resp.StatusCode, buf, &specResp); err != nil {
+			if err := proxy.Validate(resp.StatusCode, resp.Header, buf, &specResp); err != nil {
 				proxy.reporter.Error(req, op, err)
 			} else {
 				proxy.reporter.Success(req, op)
@@ -129,10 +130,16 @@ func (proxy *Proxy) newHandler(op *spec.Operation) http.HandlerFunc {
 	}
 }
 
-func (proxy *Proxy) Validate(status int, body []byte, resp *spec.Response) error {
+func (proxy *Proxy) Validate(status int, header http.Header, body []byte, resp *spec.Response) error {
 	var data interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return err
+	}
+
+	for key, val := range resp.Headers {
+		if err := validateHeaderValue(key, header.Get(key), &val); err != nil {
+			return err
+		}
 	}
 
 	// No schema to validate against
@@ -149,12 +156,21 @@ func (proxy *Proxy) Validate(status int, body []byte, resp *spec.Response) error
 	return nil
 }
 
-func copyHeaders(dst, src http.Header) {
-	for k, vv := range src {
-		for _, v := range vv {
-			dst.Add(k, v)
-		}
+func validateHeaderValue(key, value string, spec *spec.Header) error {
+	if value == "" {
+		return fmt.Errorf("%s in headers is missing", key)
 	}
+
+	// TODO: Implement the rest of the format validators
+	switch spec.Format {
+	case "int32":
+		_, err := swag.ConvertInt32(value)
+		return err
+	case "date-time":
+		_, err := strfmt.ParseDateTime(value)
+		return err
+	}
+	return nil
 }
 
 func getOperations(props *spec.PathItem) map[string]*spec.Operation {

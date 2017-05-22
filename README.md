@@ -3,7 +3,7 @@ Swagger Proxy validates HTTP Requests
 
 # TODO
 - [x] Handle shutdowns properly
-- [ ] Header verification
+- [x] Header verification (partially)
 - [ ] Content-Type negotiation
 - [ ] More testing
 - [ ] Parameterize warning behavior
