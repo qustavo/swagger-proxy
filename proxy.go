@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/go-openapi/errors"
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
@@ -134,24 +135,26 @@ func (proxy *Proxy) Validate(status int, header http.Header, body []byte, resp *
 		return err
 	}
 
+	var errs []error
 	for key, val := range resp.Headers {
 		if err := validateHeaderValue(key, header.Get(key), &val); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 
 	// No schema to validate against
-	if resp.Schema == nil {
+	if resp.Schema != nil {
+		validator := validate.NewSchemaValidator(resp.Schema, proxy.doc, "", strfmt.NewFormats())
+		result := validator.Validate(data)
+		if result.HasErrors() {
+			errs = append(errs, result.Errors...)
+		}
+	}
+
+	if len(errs) == 0 {
 		return nil
 	}
-
-	validator := validate.NewSchemaValidator(resp.Schema, proxy.doc, "", strfmt.NewFormats())
-	result := validator.Validate(data)
-	if result.HasErrors() {
-		return result.AsError()
-	}
-
-	return nil
+	return errors.CompositeValidationError(errs...)
 }
 
 func validateHeaderValue(key, value string, spec *spec.Header) error {
