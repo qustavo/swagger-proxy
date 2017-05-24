@@ -20,8 +20,9 @@ type Proxy struct {
 	target  string
 	verbose bool
 
-	router *mux.Router
-	routes map[*mux.Route]*spec.Operation
+	router       *mux.Router
+	routes       map[*mux.Route]*spec.Operation
+	reverseProxy http.Handler
 
 	reporter Reporter
 	doc      interface{} // This is useful for validate (TODO: find a better way)
@@ -56,6 +57,12 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 	for _, opt := range opts {
 		opt(proxy)
 	}
+
+	rpURL, err := url.Parse(proxy.target)
+	if err != nil {
+		return nil, err
+	}
+	proxy.reverseProxy = httputil.NewSingleHostReverseProxy(rpURL)
 
 	proxy.router.NotFoundHandler = http.HandlerFunc(proxy.notFound)
 	proxy.registerPaths(s.BasePath, s.Paths)
@@ -99,7 +106,6 @@ func (proxy *Proxy) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(wr, req)
 
 		op := proxy.routes[match.Route]
-		// Find the associated Defined Response out of the response status
 		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
 		if !ok {
 			msg := fmt.Sprintf("Server Status %d not defined by the spec", wr.Status())
@@ -117,24 +123,7 @@ func (proxy *Proxy) Middleware(next http.Handler) http.Handler {
 }
 
 func (proxy *Proxy) newHandler() http.HandlerFunc {
-	fn := func(w http.ResponseWriter, req *http.Request) error {
-		rpURL, err := url.Parse(proxy.target)
-		if err != nil {
-			return err
-		}
-
-		proxy.Middleware(
-			httputil.NewSingleHostReverseProxy(rpURL),
-		).ServeHTTP(w, req)
-
-		return nil
-	}
-
-	return func(w http.ResponseWriter, req *http.Request) {
-		if err := fn(w, req); err != nil {
-			log.Printf("err = %+v\n", err)
-		}
-	}
+	return proxy.Middleware(proxy.reverseProxy).ServeHTTP
 }
 
 func (proxy *Proxy) Validate(status int, header http.Header, body []byte, resp *spec.Response) error {
