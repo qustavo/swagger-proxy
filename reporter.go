@@ -6,26 +6,25 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/go-openapi/errors"
-	"github.com/go-openapi/spec"
 )
 
 type Reporter interface {
-	Success(req *http.Request, op *spec.Operation)
-	Error(req *http.Request, op *spec.Operation, err error)
-	Warning(req *http.Request, op *spec.Operation, msg string)
+	Success(req *http.Request)
+	Error(req *http.Request, err error)
+	Warning(req *http.Request, msg string)
 	Report()
 }
 
 type LogReporter struct {
 }
 
-func (r *LogReporter) Success(req *http.Request, op *spec.Operation) {
+func (r *LogReporter) Success(req *http.Request) {
 	fmt.Fprintf(color.Output, "%s %s %s\n",
 		color.GreenString("✔"), req.Method, req.URL,
 	)
 }
 
-func (r *LogReporter) Error(req *http.Request, op *spec.Operation, err error) {
+func (r *LogReporter) Error(req *http.Request, err error) {
 	fmt.Fprintf(color.Output, "%s %s %s\n",
 		color.RedString("✗"), req.Method, req.URL,
 	)
@@ -39,7 +38,7 @@ func (r *LogReporter) Error(req *http.Request, op *spec.Operation, err error) {
 	}
 }
 
-func (r *LogReporter) Warning(req *http.Request, op *spec.Operation, msg string) {
+func (r *LogReporter) Warning(req *http.Request, msg string) {
 	fmt.Fprintf(color.Output, "%s %s %s\n",
 		color.YellowString("!"), req.Method, req.URL,
 	)

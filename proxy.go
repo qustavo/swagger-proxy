@@ -91,7 +91,8 @@ func (proxy *Proxy) registerPaths(base string, paths *spec.Paths) {
 }
 
 func (proxy *Proxy) notFound(w http.ResponseWriter, req *http.Request) {
-	http.Error(w, "Not Found", http.StatusNotFound)
+	proxy.reporter.Warning(req, "Route not defined on the Spec")
+	proxy.reverseProxy.ServeHTTP(w, req)
 }
 
 func (proxy *Proxy) newHandler() http.Handler {
@@ -102,6 +103,7 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 		var match mux.RouteMatch
 		proxy.router.Match(req, &match)
 		if match.Handler == nil {
+			proxy.reporter.Warning(req, "Route not defined on the Spec")
 			// Route hasn't been registered on the muxer
 			return
 		}
@@ -112,15 +114,15 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 		op := proxy.routes[match.Route]
 		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
 		if !ok {
-			msg := fmt.Sprintf("Server Status %d not defined by the spec", wr.Status())
-			proxy.reporter.Warning(req, op, msg)
+			err := fmt.Errorf("Server Status %d not defined by the spec", wr.Status())
+			proxy.reporter.Error(req, err)
 			return
 		}
 
 		if err := proxy.Validate(wr.Status(), wr.Header(), wr.Body(), &specResp); err != nil {
-			proxy.reporter.Error(req, op, err)
+			proxy.reporter.Error(req, err)
 		} else {
-			proxy.reporter.Success(req, op)
+			proxy.reporter.Success(req)
 		}
 	}
 	return http.HandlerFunc(fn)
