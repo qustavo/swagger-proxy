@@ -103,7 +103,9 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		var match mux.RouteMatch
 		proxy.router.Match(req, &match)
-		if match.Handler == nil {
+		op := proxy.routes[match.Route]
+
+		if match.Handler == nil || op == nil {
 			proxy.reporter.Warning(req, "Route not defined on the Spec")
 			// Route hasn't been registered on the muxer
 			return
@@ -112,7 +114,6 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 		wr := &WriterRecorder{ResponseWriter: w}
 		next.ServeHTTP(wr, req)
 
-		op := proxy.routes[match.Route]
 		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
 		if !ok {
 			err := fmt.Errorf("Server Status %d not defined by the spec", wr.Status())

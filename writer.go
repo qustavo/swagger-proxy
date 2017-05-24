@@ -29,5 +29,8 @@ func (w *WriterRecorder) Body() []byte {
 }
 
 func (w *WriterRecorder) Status() int {
+	if w.status == 0 {
+		return 200
+	}
 	return w.status
 }
