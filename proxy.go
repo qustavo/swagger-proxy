@@ -1,10 +1,8 @@
 package proxy
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -22,7 +20,9 @@ type Proxy struct {
 	target  string
 	verbose bool
 
-	router   *mux.Router
+	router *mux.Router
+	routes map[*mux.Route]*spec.Operation
+
 	reporter Reporter
 	doc      interface{} // This is useful for validate (TODO: find a better way)
 }
@@ -48,6 +48,7 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 	proxy := &Proxy{
 		target:   "http://localhost:8080",
 		router:   mux.NewRouter(),
+		routes:   make(map[*mux.Route]*spec.Operation),
 		reporter: reporter,
 		doc:      doc,
 	}
@@ -74,51 +75,57 @@ func (proxy *Proxy) registerPaths(base string, paths *spec.Paths) {
 	for path, item := range paths.Paths {
 		// Register every spec operation under a newHandler
 		for method, op := range getOperations(&item) {
-			handler := proxy.newHandler(op)
+			handler := proxy.newHandler()
 			newPath := base + path
 			if proxy.verbose {
 				log.Printf("Register %s %s", method, newPath)
 			}
-			proxy.router.HandleFunc(newPath, handler).Methods(method)
+			route := proxy.router.HandleFunc(newPath, handler).Methods(method)
+			proxy.routes[route] = op
 		}
 	}
 }
 
-func (proxy *Proxy) newHandler(op *spec.Operation) http.HandlerFunc {
+func (proxy *Proxy) Middleware(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		var match mux.RouteMatch
+		proxy.router.Match(req, &match)
+		if match.Handler == nil {
+			proxy.notFound(w, req)
+			return
+		}
+
+		wr := &WriterRecorder{ResponseWriter: w}
+		next.ServeHTTP(wr, req)
+
+		op := proxy.routes[match.Route]
+		// Find the associated Defined Response out of the response status
+		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
+		if !ok {
+			msg := fmt.Sprintf("Server Status %d not defined by the spec", wr.Status())
+			proxy.reporter.Warning(req, op, msg)
+			return
+		}
+
+		if err := proxy.Validate(wr.Status(), wr.Header(), wr.Body(), &specResp); err != nil {
+			proxy.reporter.Error(req, op, err)
+		} else {
+			proxy.reporter.Success(req, op)
+		}
+	}
+	return http.HandlerFunc(fn)
+}
+
+func (proxy *Proxy) newHandler() http.HandlerFunc {
 	fn := func(w http.ResponseWriter, req *http.Request) error {
 		rpURL, err := url.Parse(proxy.target)
 		if err != nil {
 			return err
 		}
-		rp := httputil.NewSingleHostReverseProxy(rpURL)
 
-		// We use ModifyResponse as a hook to inspect the response,
-		// it never gets modified.
-		rp.ModifyResponse = func(resp *http.Response) error {
-			// Read from an io.ReadWriter without losing its content
-			buf, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
-
-			// Find the associated Defined Response out of the response status
-			specResp, ok := op.Responses.StatusCodeResponses[resp.StatusCode]
-			if !ok {
-				msg := fmt.Sprintf("Server Status %d not defined by the spec", resp.StatusCode)
-				proxy.reporter.Warning(req, op, msg)
-				return nil
-			}
-
-			if err := proxy.Validate(resp.StatusCode, resp.Header, buf, &specResp); err != nil {
-				proxy.reporter.Error(req, op, err)
-			} else {
-				proxy.reporter.Success(req, op)
-			}
-			return nil
-		}
-		rp.ServeHTTP(w, req)
+		proxy.Middleware(
+			httputil.NewSingleHostReverseProxy(rpURL),
+		).ServeHTTP(w, req)
 
 		return nil
 	}
