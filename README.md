@@ -39,14 +39,14 @@ import(
 )
 
 func main() {
-  // Load your spec
-  doc, _ := loads.Spec("swagger.yml")
-  
-  // Construct the proxy instance
+	// Load your spec
+	doc, _ := loads.Spec("swagger.yml")
+
+	// Construct the proxy instance
 	p, _ := proxy.New(doc.Spec(), &proxy.LogReporter{})
-  
-  middleware := p.Handler
-  // Now you can decorate your handler with middleware
+
+	middleware := p.Handler
+	// Now you can decorate your handler with middleware
 }
 ```
 
@@ -57,6 +57,6 @@ func main() {
 - [ ] More testing
 - [ ] Parameterize warning behavior
 - [ ] Parameterize NotFound behavior
-- [ ] Execute any integration test suite
+- [x] Execute an integration test suite
 - [ ] Analise request input
 - [ ] Move this list to issues
