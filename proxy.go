@@ -101,6 +101,9 @@ func (proxy *Proxy) newHandler() http.Handler {
 }
 func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
+		wr := &WriterRecorder{ResponseWriter: w}
+		next.ServeHTTP(wr, req)
+
 		var match mux.RouteMatch
 		proxy.router.Match(req, &match)
 		op := proxy.routes[match.Route]
@@ -110,9 +113,6 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 			// Route hasn't been registered on the muxer
 			return
 		}
-
-		wr := &WriterRecorder{ResponseWriter: w}
-		next.ServeHTTP(wr, req)
 
 		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
 		if !ok {
