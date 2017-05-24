@@ -70,35 +70,39 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 	return proxy, nil
 }
 
-func (proxy *Proxy) notFound(w http.ResponseWriter, req *http.Request) {
-	http.Error(w, "Not Found", http.StatusNotFound)
-}
-
-func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	proxy.router.ServeHTTP(w, req)
+func (proxy *Proxy) Router() http.Handler {
+	return proxy.router
 }
 
 func (proxy *Proxy) registerPaths(base string, paths *spec.Paths) {
 	for path, item := range paths.Paths {
 		// Register every spec operation under a newHandler
 		for method, op := range getOperations(&item) {
-			handler := proxy.newHandler()
 			newPath := base + path
 			if proxy.verbose {
 				log.Printf("Register %s %s", method, newPath)
 			}
-			route := proxy.router.HandleFunc(newPath, handler).Methods(method)
+			route := proxy.router.Handle(
+				newPath, proxy.newHandler(),
+			).Methods(method)
 			proxy.routes[route] = op
 		}
 	}
 }
 
-func (proxy *Proxy) Middleware(next http.Handler) http.Handler {
+func (proxy *Proxy) notFound(w http.ResponseWriter, req *http.Request) {
+	http.Error(w, "Not Found", http.StatusNotFound)
+}
+
+func (proxy *Proxy) newHandler() http.Handler {
+	return proxy.Handler(proxy.reverseProxy)
+}
+func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		var match mux.RouteMatch
 		proxy.router.Match(req, &match)
 		if match.Handler == nil {
-			proxy.notFound(w, req)
+			// Route hasn't been registered on the muxer
 			return
 		}
 
@@ -120,10 +124,6 @@ func (proxy *Proxy) Middleware(next http.Handler) http.Handler {
 		}
 	}
 	return http.HandlerFunc(fn)
-}
-
-func (proxy *Proxy) newHandler() http.HandlerFunc {
-	return proxy.Middleware(proxy.reverseProxy).ServeHTTP
 }
 
 func (proxy *Proxy) Validate(status int, header http.Header, body []byte, resp *spec.Response) error {

@@ -16,7 +16,7 @@ const version = "v0.0.1"
 func serve(proxy *proxy.Proxy, bind string) error {
 	s := http.Server{
 		Addr:    bind,
-		Handler: proxy,
+		Handler: proxy.Router(),
 	}
 
 	errC := make(chan error)
