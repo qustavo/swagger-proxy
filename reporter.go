@@ -34,7 +34,7 @@ func (r *LogReporter) Error(req *http.Request, err error) {
 		}
 
 	} else {
-		fmt.Printf("=> %s\n", err)
+		fmt.Printf("  => %s\n", err)
 	}
 }
 
