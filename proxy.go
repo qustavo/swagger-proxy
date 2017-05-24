@@ -121,7 +121,7 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		if err := proxy.Validate(wr.Status(), wr.Header(), wr.Body(), &specResp); err != nil {
+		if err := proxy.Validate(wr, &specResp); err != nil {
 			proxy.reporter.Error(req, err)
 		} else {
 			proxy.reporter.Success(req)
@@ -130,22 +130,22 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (proxy *Proxy) Validate(status int, header http.Header, body []byte, resp *spec.Response) error {
+func (proxy *Proxy) Validate(resp Response, spec *spec.Response) error {
 	var data interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
+	if err := json.Unmarshal(resp.Body(), &data); err != nil {
 		return err
 	}
 
 	var errs []error
-	for key, val := range resp.Headers {
-		if err := validateHeaderValue(key, header.Get(key), &val); err != nil {
+	for key, val := range spec.Headers {
+		if err := validateHeaderValue(key, resp.Header().Get(key), &val); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	// No schema to validate against
-	if resp.Schema != nil {
-		validator := validate.NewSchemaValidator(resp.Schema, proxy.doc, "", strfmt.NewFormats())
+	if spec.Schema != nil {
+		validator := validate.NewSchemaValidator(spec.Schema, proxy.doc, "", strfmt.NewFormats())
 		result := validator.Validate(data)
 		if result.HasErrors() {
 			errs = append(errs, result.Errors...)

@@ -11,6 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testResponse struct {
+	status int
+	header http.Header
+	body   []byte
+}
+
+func (t *testResponse) Status() int         { return t.status }
+func (t *testResponse) Header() http.Header { return t.header }
+func (t *testResponse) Body() []byte        { return t.body }
+
 func openFixture(t *testing.T, name string) *spec.Swagger {
 	doc, err := loads.Spec("./fixtures/" + name)
 	require.NoError(t, err)
@@ -26,7 +36,7 @@ func TestValidation(t *testing.T) {
 	for _, code := range []int{200, 400} {
 		resp, ok := rr.StatusCodeResponses[code]
 		require.True(t, ok)
-		require.NoError(t, app.Validate(code, nil, []byte("[]"), &resp))
+		require.NoError(t, app.Validate(&testResponse{status: code, body: []byte("[]")}, &resp))
 	}
 }
 

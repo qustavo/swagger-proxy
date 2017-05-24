@@ -5,6 +5,12 @@ import (
 	"net/http"
 )
 
+type Response interface {
+	Status() int
+	Header() http.Header
+	Body() []byte
+}
+
 type WriterRecorder struct {
 	http.ResponseWriter
 	status int
