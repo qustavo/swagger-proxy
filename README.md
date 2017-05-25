@@ -1,4 +1,4 @@
-# swagger-proxy
+# swagger-proxy [![Build Status](https://travis-ci.org/gchaincl/swagger-proxy.svg?branch=master)](https://travis-ci.org/gchaincl/swagger-proxy)
 Swagger Proxy ensure HTTP Responses correctness based on swagger specs. 
 
 # Usage
