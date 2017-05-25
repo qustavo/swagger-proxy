@@ -1,4 +1,4 @@
-v0.0.1 (unreleased)
+v0.0.1
 
 * Handle Shutdown properly
 * Partial Header Validation
