@@ -125,27 +125,28 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
+type validatorFunc func(Response, *spec.Operation) error
+
 func (proxy *Proxy) Validate(resp Response, op *spec.Operation) error {
 	if _, ok := op.Responses.StatusCodeResponses[resp.Status()]; !ok {
 		return fmt.Errorf("Server Status %d not defined by the spec", resp.Status())
 	}
 
+	var validators = []validatorFunc{
+		proxy.ValidateMIME,
+		proxy.ValidateHeaders,
+		proxy.ValidateBody,
+	}
+
 	var errs []error
-
-	if err := proxy.ValidateMIME(resp, op); err != nil {
-		errs = append(errs, err)
-	}
-
-	if err := proxy.ValidateHeaders(resp, op); err != nil {
-		if cErr, ok := err.(*errors.CompositeError); ok {
-			errs = append(errs, cErr.Errors...)
-		} else {
-			errs = append(errs, err)
+	for _, v := range validators {
+		if err := v(resp, op); err != nil {
+			if cErr, ok := err.(*errors.CompositeError); ok {
+				errs = append(errs, cErr.Errors...)
+			} else {
+				errs = append(errs, err)
+			}
 		}
-	}
-
-	if err := proxy.ValidateBody(resp, op); err != nil {
-		errs = append(errs, err)
 	}
 
 	if len(errs) == 0 {
