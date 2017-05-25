@@ -32,22 +32,36 @@ Usage of swagger-proxy:
 ## Middleware
 If your server is built in Golang, you can use it as a middleware:
 ```go
-import(
-  "github.com/go-openapi/loads"
-  proxy "github.com/gchaincl/swagger-proxy"
+package main
 
+import (
+	"log"
+	"net/http"
+
+	proxy "github.com/gchaincl/swagger-proxy"
+	"github.com/go-openapi/loads"
 )
 
 func main() {
-	// Load your spec
-	doc, _ := loads.Spec("swagger.yml")
+	doc, err := loads.Spec("swagger.json")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Construct the proxy instance
-	p, _ := proxy.New(doc.Spec(), &proxy.LogReporter{})
+	p, err := proxy.New(doc.Spec(), &proxy.LogReporter{}, proxy.WithVerbose(true))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	middleware := p.Handler
-	// Now you can decorate your handler with middleware
+	app := func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == "POST" {
+			w.WriteHeader(201)
+		}
+	}
+	log.Printf("Server Running")
+	http.ListenAndServe(":8989", p.Handler(http.HandlerFunc(app)))
 }
+
 ```
 
 # TODO

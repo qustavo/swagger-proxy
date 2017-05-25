@@ -1,0 +1,25 @@
+{
+	"swagger": "2.0",
+	"paths": {
+		"/foo": {
+			"get": {
+				"responses": {
+					"200": {
+						"description": "OK"
+					}
+				}
+			},
+			"post": {
+				"produces": [
+					"application/xml",
+					"application/json"
+				],
+				"responses": {
+					"201": {
+						"description": "Created"
+					}
+				}
+			}
+		}
+	}
+}
