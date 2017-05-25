@@ -230,22 +230,21 @@ func validateHeaderValue(key, value string, spec *spec.Header) error {
 }
 
 func getOperations(props *spec.PathItem) map[string]*spec.Operation {
-	ops := make(map[string]*spec.Operation)
+	ops := map[string]*spec.Operation{
+		"DELETE":  props.Delete,
+		"GET":     props.Get,
+		"HEAD":    props.Head,
+		"OPTIONS": props.Options,
+		"PATCH":   props.Patch,
+		"POST":    props.Post,
+		"PUT":     props.Put,
+	}
 
-	if props.Delete != nil {
-		ops["DELETE"] = props.Delete
-	} else if props.Get != nil {
-		ops["GET"] = props.Get
-	} else if props.Head != nil {
-		ops["HEAD"] = props.Head
-	} else if props.Options != nil {
-		ops["OPTIONS"] = props.Options
-	} else if props.Patch != nil {
-		ops["PATCH"] = props.Patch
-	} else if props.Post != nil {
-		ops["POST"] = props.Post
-	} else if props.Put != nil {
-		ops["PUT"] = props.Put
+	// Keep those != nil
+	for key, op := range ops {
+		if op == nil {
+			delete(ops, key)
+		}
 	}
 
 	return ops
