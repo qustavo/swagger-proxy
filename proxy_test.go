@@ -32,46 +32,72 @@ func TestValidation(t *testing.T) {
 	app, err := New(spec, nil)
 	require.NoError(t, err)
 
-	rr := spec.Paths.Paths["/pet/findByStatus"].Get.Responses
-	for _, code := range []int{200, 400} {
-		resp, ok := rr.StatusCodeResponses[code]
-		require.True(t, ok)
-		require.NoError(t, app.Validate(&testResponse{status: code, body: []byte("[]")}, &resp))
+	op := spec.Paths.Paths["/pet/findByStatus"].Get
+	resp := &testResponse{
+		header: http.Header{},
+		body:   []byte("[]"),
 	}
+	resp.Header().Set("Content-Type", "application/json")
+	for _, status := range []int{200, 400} {
+		resp.status = status
+		assert.NoError(t, app.Validate(resp, op))
+	}
+
+	resp.status = 999
+	assert.Error(t, app.Validate(resp, op))
 }
 
 func TestHeaderValidation(t *testing.T) {
-	doc := openFixture(t, "petstore.json")
-	spec := doc.Paths.Paths["/user/login"].Get.
-		Responses.StatusCodeResponses[200].Headers
-	header := http.Header{}
+	swagger := openFixture(t, "petstore.json")
+	proxy, err := New(swagger, nil)
+	require.NoError(t, err)
+
+	op := swagger.Paths.Paths["/user/login"].Get
+	resp := &testResponse{
+		status: 200,
+		header: http.Header{},
+	}
 
 	t.Run("Valid Headers", func(t *testing.T) {
-		header.Set("X-Rate-Limit", "32")
-		header.Set("X-Expires-After", time.Now().Format(time.RFC3339))
+		resp.Header().Set("X-Rate-Limit", "32")
+		resp.Header().Set("X-Expires-After", time.Now().Format(time.RFC3339))
 
-		for key, val := range spec {
-			err := validateHeaderValue(key, header.Get(key), &val)
-			assert.NoError(t, err, "For header "+key)
-		}
+		assert.NoError(t, proxy.ValidateHeaders(resp, op))
 	})
 
 	t.Run("Invalid Headers", func(t *testing.T) {
-		header.Set("X-Rate-Limit", "NaN")
-		header.Set("X-Expires-After", "Not a date-time")
+		resp.Header().Set("X-Rate-Limit", "NaN")
+		resp.Header().Set("X-Expires-After", "Not a date-time")
 
-		for key, val := range spec {
-			err := validateHeaderValue(key, header.Get(key), &val)
-			assert.Error(t, err, "For header "+key)
-		}
+		assert.Error(t, proxy.ValidateHeaders(resp, op))
 	})
+}
 
-	t.Run("Missing Headers key", func(t *testing.T) {
-		for key, val := range spec {
-			err := validateHeaderValue(key, "", &val)
-			assert.Error(t, err, "For header "+key)
-			assert.Equal(t, key+" in headers is missing", err.Error())
-		}
+func TestProducesDefinition(t *testing.T) {
+	swagger := openFixture(t, "petstore.json")
+	app, err := New(swagger, nil)
+	require.NoError(t, err)
+
+	resp := &testResponse{header: http.Header{}}
+	op := swagger.Paths.Paths["/pet"].Post
+	assert.Error(t, app.ValidateMIME(resp, op),
+		"Content-Type: application/json is missing")
+
+	resp.Header().Set("Content-Type", "application/json")
+	assert.NoError(t, app.ValidateMIME(resp, op),
+		"Content-Type: application/json is present")
+
+	t.Run("IsInheritedFromRoot", func(t *testing.T) {
+		// MOVE `Produces` property to root
+		swagger.Produces = []string{"application/json"}
+		op.Produces = []string{}
+
+		resp.Header().Del("Content-Type")
+		assert.Error(t, app.ValidateMIME(resp, op),
+			"Content-Type: application/json is missing")
+
+		resp.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, app.ValidateMIME(resp, op),
+			"Content-Type: application/json is present")
 	})
-
 }

@@ -27,6 +27,7 @@ type Proxy struct {
 
 	reporter Reporter
 	doc      interface{} // This is useful for validate (TODO: find a better way)
+	spec     *spec.Swagger
 }
 
 type ProxyOpt func(*Proxy)
@@ -53,6 +54,7 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 		routes:   make(map[*mux.Route]*spec.Operation),
 		reporter: reporter,
 		doc:      doc,
+		spec:     s,
 	}
 
 	for _, opt := range opts {
@@ -114,14 +116,7 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		specResp, ok := op.Responses.StatusCodeResponses[wr.Status()]
-		if !ok {
-			err := fmt.Errorf("Server Status %d not defined by the spec", wr.Status())
-			proxy.reporter.Error(req, err)
-			return
-		}
-
-		if err := proxy.Validate(wr, &specResp); err != nil {
+		if err := proxy.Validate(wr, op); err != nil {
 			proxy.reporter.Error(req, err)
 		} else {
 			proxy.reporter.Success(req)
@@ -130,32 +125,90 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (proxy *Proxy) Validate(resp Response, spec *spec.Response) error {
-	var data interface{}
-	if err := json.Unmarshal(resp.Body(), &data); err != nil {
-		return err
+func (proxy *Proxy) Validate(resp Response, op *spec.Operation) error {
+	if _, ok := op.Responses.StatusCodeResponses[resp.Status()]; !ok {
+		return fmt.Errorf("Server Status %d not defined by the spec", resp.Status())
 	}
 
 	var errs []error
-	for key, val := range spec.Headers {
-		if err := validateHeaderValue(key, resp.Header().Get(key), &val); err != nil {
+
+	if err := proxy.ValidateMIME(resp, op); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := proxy.ValidateHeaders(resp, op); err != nil {
+		if cErr, ok := err.(*errors.CompositeError); ok {
+			errs = append(errs, cErr.Errors...)
+		} else {
 			errs = append(errs, err)
 		}
 	}
 
-	// No schema to validate against
-	if spec.Schema != nil {
-		validator := validate.NewSchemaValidator(spec.Schema, proxy.doc, "", strfmt.NewFormats())
-		result := validator.Validate(data)
-		if result.HasErrors() {
-			errs = append(errs, result.Errors...)
-		}
+	if err := proxy.ValidateBody(resp, op); err != nil {
+		errs = append(errs, err)
 	}
 
 	if len(errs) == 0 {
 		return nil
 	}
 	return errors.CompositeValidationError(errs...)
+}
+
+func (proxy *Proxy) ValidateMIME(resp Response, op *spec.Operation) error {
+	// Use Operation Spec or fallback to root
+	produces := op.Produces
+	if len(produces) == 0 {
+		produces = proxy.spec.Produces
+	}
+
+	ct := resp.Header().Get("Content-Type")
+	if len(produces) == 0 {
+		return nil
+	}
+
+	for _, mime := range produces {
+		if ct == mime {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Content-Type Error")
+}
+
+func (proxy *Proxy) ValidateHeaders(resp Response, op *spec.Operation) error {
+	var errs []error
+
+	r := op.Responses.StatusCodeResponses[resp.Status()]
+	for key, spec := range r.Headers {
+		if err := validateHeaderValue(key, resp.Header().Get(key), &spec); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
+	return errors.CompositeValidationError(errs...)
+}
+
+func (proxy *Proxy) ValidateBody(resp Response, op *spec.Operation) error {
+	r := op.Responses.StatusCodeResponses[resp.Status()]
+	if r.Schema == nil {
+		return nil
+	}
+
+	var data interface{}
+	if err := json.Unmarshal(resp.Body(), &data); err != nil {
+		return err
+	}
+
+	v := validate.NewSchemaValidator(r.Schema, proxy.doc, "", strfmt.Default)
+	if result := v.Validate(data); result.HasErrors() {
+		return result.AsError()
+	}
+
+	return nil
 }
 
 func validateHeaderValue(key, value string, spec *spec.Header) error {
