@@ -173,7 +173,7 @@ func (proxy *Proxy) ValidateMIME(resp Response, op *spec.Operation) error {
 		}
 	}
 
-	return fmt.Errorf("Content-Type Error")
+	return fmt.Errorf("Content-Type Error: Should produce %q, but got: '%s'", produces, ct)
 }
 
 func (proxy *Proxy) ValidateHeaders(resp Response, op *spec.Operation) error {
