@@ -63,14 +63,3 @@ func main() {
 }
 
 ```
-
-# TODO
-- [x] Handle shutdowns properly
-- [x] Header verification (partially)
-- [x] Content-Type negotiation
-- [x] More testing
-- [ ] ~~Parameterize warning behavior~~
-- [ ] ~~Parameterize NotFound behavior~~
-- [x] Execute an integration test suite
-- [ ] Analise request input
-- [ ] Move this list to issues
