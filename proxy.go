@@ -88,6 +88,10 @@ func (proxy *Proxy) Router() http.Handler {
 	return proxy.router
 }
 
+func (proxy *Proxy) Target() string {
+	return proxy.target
+}
+
 func (proxy *Proxy) registerPaths() {
 	base := proxy.spec.BasePath
 	paths := proxy.spec.Paths

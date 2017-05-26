@@ -24,7 +24,7 @@ func serve(proxy *proxy.Proxy, bind string) error {
 
 	errC := make(chan error)
 	go func() {
-		log.Println("SwaggerProxy", version, "listening on", bind)
+		log.Println("SwaggerProxy", version, "listening on", bind, "->", proxy.Target())
 		errC <- s.ListenAndServe()
 	}()
 
