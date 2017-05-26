@@ -2,6 +2,7 @@
 
 ## v0.1.0 (Unreleased)
 
+* Display pending operations when proxy shuts down
 * Live spec reloading [\#1](https://github.com/gchaincl/swagger-proxy/issues/1)
 
 ## v0.0.1 (2017-05-25)

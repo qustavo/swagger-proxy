@@ -152,5 +152,50 @@ func TestHTTPHandler(t *testing.T) {
 	assert.Equal(t, 1, len(reporter.success))
 	assert.Equal(t, 1, len(reporter.errors))
 	assert.Equal(t, 1, len(reporter.warnings))
+}
 
+func TestPendingOperations(t *testing.T) {
+	swagger := openFixture(t, "petstore.json")
+	app, err := New(swagger, &testReporter{})
+	require.NoError(t, err)
+
+	// Dummy server using Handler as middleware
+	srv := httptest.NewServer(app.Handler(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, req *http.Request) {
+			},
+		),
+	))
+	defer srv.Close()
+
+	pending := len(app.PendingOperations())
+
+	// Count defines responses
+	var opsCounter int
+	WalkOps(swagger, func(path, meth string, op *spec.Operation) {
+		opsCounter += 1
+	})
+	require.Equal(t, opsCounter, pending)
+
+	t.Run("AreRemoved", func(t *testing.T) {
+		http.Get(srv.URL + "/v2/pet/findByStatus")
+		assert.Equal(t, pending-1, len(app.PendingOperations()))
+
+		http.Post(srv.URL+"/v2/pet", "", nil)
+		assert.Equal(t, pending-2, len(app.PendingOperations()))
+
+		pending = len(app.PendingOperations())
+	})
+
+	t.Run("AreNotRemovedWhenPathNotFound", func(t *testing.T) {
+		http.Get(srv.URL + "/not_and_endpoint")
+		assert.Equal(t, pending, len(app.PendingOperations()))
+	})
+
+	t.Run("AreRemovedOnceWhenCalledNTimes", func(t *testing.T) {
+		http.Get(srv.URL + "/v2/store/inventory")
+		http.Get(srv.URL + "/v2/store/inventory")
+		http.Get(srv.URL + "/v2/store/inventory")
+		assert.Equal(t, pending-1, len(app.PendingOperations()))
+	})
 }

@@ -27,8 +27,9 @@ type Proxy struct {
 
 	reporter Reporter
 
-	doc  interface{} // This is useful for validate (TODO: find a better way)
-	spec *spec.Swagger
+	doc               interface{} // This is useful for validate (TODO: find a better way)
+	spec              *spec.Swagger
+	pendingOperations map[*spec.Operation]struct{}
 }
 
 type ProxyOpt func(*Proxy)
@@ -93,21 +94,19 @@ func (proxy *Proxy) Target() string {
 }
 
 func (proxy *Proxy) registerPaths() {
+	proxy.pendingOperations = make(map[*spec.Operation]struct{})
 	base := proxy.spec.BasePath
-	paths := proxy.spec.Paths
 
 	router := mux.NewRouter()
-	for path, item := range paths.Paths {
-		// Register every spec operation under a newHandler
-		for method, op := range getOperations(&item) {
-			newPath := base + path
-			if proxy.verbose {
-				log.Printf("Register %s %s", method, newPath)
-			}
-			route := router.Handle(newPath, proxy.newHandler()).Methods(method)
-			proxy.routes[route] = op
+	WalkOps(proxy.spec, func(path, method string, op *spec.Operation) {
+		newPath := base + path
+		if proxy.verbose {
+			log.Printf("Register %s %s", method, newPath)
 		}
-	}
+		route := router.Handle(newPath, proxy.newHandler()).Methods(method)
+		proxy.routes[route] = op
+		proxy.pendingOperations[op] = struct{}{}
+	})
 	*proxy.router = *router
 }
 
@@ -133,6 +132,7 @@ func (proxy *Proxy) Handler(next http.Handler) http.Handler {
 			// Route hasn't been registered on the muxer
 			return
 		}
+		proxy.operationExecuted(op)
 
 		if err := proxy.Validate(wr, op); err != nil {
 			proxy.reporter.Error(req, err)
@@ -245,6 +245,28 @@ func validateHeaderValue(key, value string, spec *spec.Header) error {
 		return err
 	}
 	return nil
+}
+
+func (proxy *Proxy) PendingOperations() []*spec.Operation {
+	var ops []*spec.Operation
+	for op, _ := range proxy.pendingOperations {
+		ops = append(ops, op)
+	}
+	return ops
+}
+
+func (proxy *Proxy) operationExecuted(op *spec.Operation) {
+	delete(proxy.pendingOperations, op)
+}
+
+type WalkOpsFunc func(path, meth string, op *spec.Operation)
+
+func WalkOps(spec *spec.Swagger, fn WalkOpsFunc) {
+	for path, props := range spec.Paths.Paths {
+		for meth, op := range getOperations(&props) {
+			fn(path, meth, op)
+		}
+	}
 }
 
 func getOperations(props *spec.PathItem) map[string]*spec.Operation {

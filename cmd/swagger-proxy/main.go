@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -130,5 +131,12 @@ func main() {
 
 	if err := serve(proxy, *bind); err != nil {
 		log.Println(err)
+	}
+
+	// Report PendingOperations
+	fmt.Println("Pending Operations:")
+	fmt.Println("------------------")
+	for i, op := range proxy.PendingOperations() {
+		fmt.Printf("%03d) id=%s\n", i+1, op.ID)
 	}
 }
