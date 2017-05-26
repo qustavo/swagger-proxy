@@ -26,8 +26,9 @@ type Proxy struct {
 	reverseProxy http.Handler
 
 	reporter Reporter
-	doc      interface{} // This is useful for validate (TODO: find a better way)
-	spec     *spec.Swagger
+
+	doc  interface{} // This is useful for validate (TODO: find a better way)
+	spec *spec.Swagger
 }
 
 type ProxyOpt func(*Proxy)
@@ -36,25 +37,15 @@ func WithTarget(target string) ProxyOpt { return func(proxy *Proxy) { proxy.targ
 func WithVerbose(v bool) ProxyOpt       { return func(proxy *Proxy) { proxy.verbose = v } }
 
 func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
-	// validate.NewSchemaValidator requires the spec as an interface{}
-	// That's why we Unmarshal(Marshal()) the document
-	data, err := json.Marshal(s)
-	if err != nil {
-		return nil, err
-	}
-
-	var doc interface{}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, err
-	}
-
 	proxy := &Proxy{
 		target:   "http://localhost:8080",
 		router:   mux.NewRouter(),
 		routes:   make(map[*mux.Route]*spec.Operation),
 		reporter: reporter,
-		doc:      doc,
-		spec:     s,
+	}
+
+	if err := proxy.SetSpec(s); err != nil {
+		return nil, err
 	}
 
 	for _, opt := range opts {
@@ -68,16 +59,40 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 	proxy.reverseProxy = httputil.NewSingleHostReverseProxy(rpURL)
 
 	proxy.router.NotFoundHandler = http.HandlerFunc(proxy.notFound)
-	proxy.registerPaths(s.BasePath, s.Paths)
+	proxy.registerPaths()
 
 	return proxy, nil
+}
+
+func (proxy *Proxy) SetSpec(spec *spec.Swagger) error {
+	// validate.NewSchemaValidator requires the spec as an interface{}
+	// That's why we Unmarshal(Marshal()) the document
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return err
+	}
+
+	var doc interface{}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return err
+	}
+
+	proxy.doc = doc
+	proxy.spec = spec
+
+	proxy.registerPaths()
+	return nil
 }
 
 func (proxy *Proxy) Router() http.Handler {
 	return proxy.router
 }
 
-func (proxy *Proxy) registerPaths(base string, paths *spec.Paths) {
+func (proxy *Proxy) registerPaths() {
+	base := proxy.spec.BasePath
+	paths := proxy.spec.Paths
+
+	router := mux.NewRouter()
 	for path, item := range paths.Paths {
 		// Register every spec operation under a newHandler
 		for method, op := range getOperations(&item) {
@@ -85,12 +100,11 @@ func (proxy *Proxy) registerPaths(base string, paths *spec.Paths) {
 			if proxy.verbose {
 				log.Printf("Register %s %s", method, newPath)
 			}
-			route := proxy.router.Handle(
-				newPath, proxy.newHandler(),
-			).Methods(method)
+			route := router.Handle(newPath, proxy.newHandler()).Methods(method)
 			proxy.routes[route] = op
 		}
 	}
+	*proxy.router = *router
 }
 
 func (proxy *Proxy) notFound(w http.ResponseWriter, req *http.Request) {
