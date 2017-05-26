@@ -3,7 +3,6 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -101,7 +100,7 @@ func (proxy *Proxy) registerPaths() {
 	WalkOps(proxy.spec, func(path, method string, op *spec.Operation) {
 		newPath := base + path
 		if proxy.verbose {
-			log.Printf("Register %s %s", method, newPath)
+			fmt.Printf("Register %s %s", method, newPath)
 		}
 		route := router.Handle(newPath, proxy.newHandler()).Methods(method)
 		proxy.routes[route] = op
