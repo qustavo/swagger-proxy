@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -20,6 +21,28 @@ type testResponse struct {
 func (t *testResponse) Status() int         { return t.status }
 func (t *testResponse) Header() http.Header { return t.header }
 func (t *testResponse) Body() []byte        { return t.body }
+
+type testReporter struct {
+	success  []*http.Request
+	errors   []error
+	warnings []string
+}
+
+func (t *testReporter) Success(req *http.Request) {
+	t.success = append(t.success, req)
+}
+
+func (t *testReporter) Error(req *http.Request, err error) {
+	t.errors = append(t.errors, err)
+}
+
+func (t *testReporter) Warning(req *http.Request, msg string) {
+	t.warnings = append(t.warnings, msg)
+}
+
+func (t *testReporter) Report() {
+	panic("not implemented")
+}
 
 func openFixture(t *testing.T, name string) *spec.Swagger {
 	doc, err := loads.Spec("./fixtures/" + name)
@@ -100,4 +123,34 @@ func TestProducesDefinition(t *testing.T) {
 		assert.NoError(t, app.ValidateMIME(resp, op),
 			"Content-Type: application/json is present")
 	})
+}
+
+func TestHTTPHandler(t *testing.T) {
+	swagger := openFixture(t, "petstore.json")
+	reporter := &testReporter{}
+	app, err := New(swagger, reporter)
+	require.NoError(t, err)
+
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.String() == "/v2/store/inventory" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("{}"))
+		}
+	}
+
+	srv := httptest.NewServer(app.Handler(http.HandlerFunc(fn)))
+	defer srv.Close()
+
+	for _, url := range []string{
+		"/v2/store/inventory",   // SUCCESS
+		"/v2/pet/findByStatus",  // ERROR
+		"/not_a_registered_url", // WARNING
+	} {
+		http.Get(srv.URL + url)
+	}
+
+	assert.Equal(t, 1, len(reporter.success))
+	assert.Equal(t, 1, len(reporter.errors))
+	assert.Equal(t, 1, len(reporter.warnings))
+
 }
