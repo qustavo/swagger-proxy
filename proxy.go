@@ -100,7 +100,7 @@ func (proxy *Proxy) registerPaths() {
 	WalkOps(proxy.spec, func(path, method string, op *spec.Operation) {
 		newPath := base + path
 		if proxy.verbose {
-			fmt.Printf("Register %s %s", method, newPath)
+			fmt.Printf("Register %s %s\n", method, newPath)
 		}
 		route := router.Handle(newPath, proxy.newHandler()).Methods(method)
 		proxy.routes[route] = op
