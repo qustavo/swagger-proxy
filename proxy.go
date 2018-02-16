@@ -58,8 +58,8 @@ func New(s *spec.Swagger, reporter Reporter, opts ...ProxyOpt) (*Proxy, error) {
 	}
 	proxy.reverseProxy = httputil.NewSingleHostReverseProxy(rpURL)
 
-	proxy.router.NotFoundHandler = http.HandlerFunc(proxy.notFound)
 	proxy.registerPaths()
+	proxy.router.NotFoundHandler = http.HandlerFunc(proxy.notFound)
 
 	return proxy, nil
 }
