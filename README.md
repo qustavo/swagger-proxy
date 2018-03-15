@@ -13,7 +13,7 @@ SwaggerProxy will rely the request and analize the server response.
 
 ### Install
 ```bash
-go get github.com/gchaincl/swagger-proxy/cmd/swagger-proxy`
+go get github.com/gchaincl/swagger-proxy/cmd/swagger-proxy
 ```
 ### Run
 ```bash
