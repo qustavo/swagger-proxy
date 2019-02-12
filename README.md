@@ -27,6 +27,8 @@ Usage of swagger-proxy:
         Target (default "http://localhost:4321")
   -verbose
         Verbose
+  -watch
+        Watch
 ```
 
 ## Middleware
