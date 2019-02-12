@@ -112,6 +112,7 @@ func main() {
 	spec := flag.String("spec", "swagger.yml", "Swagger Spec")
 	target := flag.String("target", "http://localhost:4321", "Target")
 	verbose := flag.Bool("verbose", false, "Verbose")
+	watch := flag.Bool("watch", true, "Watch")
 	flag.Parse()
 
 	doc, err := loads.Spec(*spec)
@@ -127,7 +128,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go watchFor(proxy, *spec)
+	if watch {
+		go watchFor(proxy, *spec)
+	}
 
 	if err := serve(proxy, *bind); err != nil {
 		log.Println(err)
